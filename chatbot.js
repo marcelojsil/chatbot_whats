@@ -2,7 +2,7 @@
 
 const io = require("socket.io")(http, {
     cors: {
-        origin: "https://meusite.netlify.app",
+        origin: "https://marthec.com.br",
         methods: ["GET", "POST"]
     }
 });

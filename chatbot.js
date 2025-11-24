@@ -168,14 +168,9 @@ io.on("connection", (socket) => {
     console.log("🖥️ Painel administrativo conectado!");
 
     socket.on("gerar_qr", async () => {
-        console.log("🔄 Painel pediu novo QR Code...");
-
-        try {
-            await client.destroy();   // encerra sessão atual
-        } catch (e) {}
-
-        iniciarWhatsapp(); // cria um novo client e gera novo QR
-    });
+    console.log("🔄 Painel pediu novo QR Code...");
+    await resetarWhatsapp();
+});
 });
 
 
@@ -187,3 +182,28 @@ server.listen(PORT, () => {
     console.log("🚀 Servidor rodando na porta " + PORT);
 });
 
+
+async function resetarWhatsapp() {
+    console.log("♻ Reiniciando WhatsApp...");
+
+    try {
+        if (client) {
+            await client.destroy();
+        }
+    } catch (e) {
+        console.log("⚠ Erro ao destruir client (não é grave):", e.message);
+    }
+
+    // Mata todos os processos do Chrome deixados abertos
+    const { exec } = require("child_process");
+
+    exec("pkill chrome || pkill chromium || pkill google-chrome", (err) => {
+        console.log("🧹 Matando processos antigos do Chrome...");
+    });
+
+    // Aguarda 1 segundo para limpeza
+    await new Promise(res => setTimeout(res, 1000));
+
+    // Reinicializa o cliente
+    iniciarWhatsapp();
+}

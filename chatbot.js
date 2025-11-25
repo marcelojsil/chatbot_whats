@@ -16,12 +16,49 @@ const io = require("socket.io")(server, {
 const qrcode = require("qrcode-terminal");
 const { Client, Buttons, List, MessageMedia, LocalAuth } = require("whatsapp-web.js");
 
+let client;
+
+
+// -------------------------------------------
+// FUNÇÃO KEEP ALIVE PARA O RENDER E PUPPETEER
+// -------------------------------------------
+function ativarKeepAlive() {
+    // Mantém o navegador vivo
+    setInterval(() => {
+        try {
+            client.pupPage?.evaluate(() => {});
+        } catch (e) {
+            console.log("⚠ KeepAlive falhou:", e.message);
+        }
+    }, 25000);
+
+    // Evita que o Render derrube o container
+    setInterval(() => {
+        console.log("🔄 Heartbeat: servidor ativo");
+    }, 50000);
+}
+
+
+// -------------------------------------------
+// FUNÇÃO DE RECONEXÃO
+// -------------------------------------------
+async function reconectar(forceQR = false) {
+    console.log("♻ Reiniciando sessão do WhatsApp...");
+
+    try {
+        if (client) await client.destroy();
+    } catch {}
+
+    iniciarWhatsapp();
+
+    if (forceQR) console.log("📸 Aguardando novo QR Code...");
+}
+
+
 
 // -------------------------------------------
 // FUNÇÃO PARA CRIAR NOVA INSTÂNCIA DO CLIENT
 // -------------------------------------------
-let client;
-
 function iniciarWhatsapp() {
 
     client = new Client({
@@ -29,8 +66,12 @@ function iniciarWhatsapp() {
         puppeteer: {
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox']
-        }
+        },
+        restartOnAuthFail: true
     });
+
+    // Ativa keep alive
+    ativarKeepAlive();
 
     // QR Code
     client.on("qr", qr => {
@@ -45,11 +86,24 @@ function iniciarWhatsapp() {
         io.emit("whatsapp_ready");
     });
 
+    // Evento de desconexão
+    client.on("disconnected", reason => {
+        console.log("🔴 WhatsApp desconectado:", reason);
+        reconectar(true);
+    });
+
+    // Sessão inválida (quando o WhatsApp derruba)
+    client.on("remote_session_invalidated", () => {
+        console.log("❌ Sessão inválida, gerando novo QR...");
+        reconectar(true);
+    });
+
     // Mensagens automáticas
     configurarFunil(client);
 
     client.initialize();
 }
+
 
 
 // -------------------------------------------
@@ -87,7 +141,7 @@ function configurarFunil(client) {
             await delay(3000);
 
             await client.sendMessage(msg.from,
-                'Nosso serviço oferece consultas médicas 24h por dia...'
+                'Nós desenvolvemos e hospedamos o site para sua empresa, e você só começa a pagar depois que aprovar o site e já estiver online.'
             );
 
             await delay(3000);
@@ -95,12 +149,12 @@ function configurarFunil(client) {
             await delay(3000);
 
             await client.sendMessage(msg.from,
-                'COMO FUNCIONA?\n1º Passo...\n2º Passo...'
+                'COMO FUNCIONA?\n1º Passo: Você irá responder um formulário para ...\n2º Passo: Iremos desenvolver o site da sua empresa'
             );
 
             await delay(3000);
             await client.sendMessage(msg.from,
-                'Link para cadastro: https://www.marthec.com.br'
+                'Link para o formulário: https://www.marthec.com.br'
             );
         }
 
@@ -114,11 +168,12 @@ function configurarFunil(client) {
             await delay(3000);
 
             await client.sendMessage(msg.from,
-                '*Plano Individual:* R$22,50...'
+                '*Plano Individual:* R$22,50 \n *Plano Dev:* R$39,50 \n *Plano Completo:* R$49,50 \n...'
             );
 
             await delay(3000);
-            await client.sendMessage(msg.from, 'https://www.marthec.com.br');
+            await client.sendMessage(msg.from, 
+                'Link para adesão: https://www.marthec.com.br');
         }
 
         // Resposta 3
@@ -155,6 +210,7 @@ function configurarFunil(client) {
 }
 
 
+
 // -------------------------------------------
 // INICIA O CLIENTE UMA VEZ AO SUBIR O SERVIDOR
 // -------------------------------------------
@@ -168,9 +224,9 @@ io.on("connection", (socket) => {
     console.log("🖥️ Painel administrativo conectado!");
 
     socket.on("gerar_qr", async () => {
-    console.log("🔄 Painel pediu novo QR Code...");
-    await resetarWhatsapp();
-});
+        console.log("🔄 Painel pediu novo QR Code...");
+        await resetarWhatsapp();
+    });
 });
 
 
@@ -183,6 +239,9 @@ server.listen(PORT, () => {
 });
 
 
+// -------------------------------------------
+// RESETAR WHATSAPP — LIMPA CHROME E REINICIA
+// -------------------------------------------
 async function resetarWhatsapp() {
     console.log("♻ Reiniciando WhatsApp...");
 
@@ -197,7 +256,7 @@ async function resetarWhatsapp() {
     // Mata todos os processos do Chrome deixados abertos
     const { exec } = require("child_process");
 
-    exec("pkill chrome || pkill chromium || pkill google-chrome", (err) => {
+    exec("pkill chrome || pkill chromium || pkill google-chrome", () => {
         console.log("🧹 Matando processos antigos do Chrome...");
     });
 

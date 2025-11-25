@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: marthec-chatbot
+    env: node
+    buildCommand: "npm install"
+    startCommand: "node chatbot.js"
+    plan: starter
+    envVars:
+      NODE_VERSION: 18

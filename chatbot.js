@@ -1,5 +1,5 @@
 // -------------------------------------------
-// IMPORTS E CONFIGURAÇÕES INICIAIS
+// IMPORTS
 // -------------------------------------------
 const express = require("express");
 const http = require("http");
@@ -16,26 +16,19 @@ const io = require("socket.io")(server, {
 const qrcode = require("qrcode-terminal");
 const { Client, Buttons, List, MessageMedia, LocalAuth } = require("whatsapp-web.js");
 
+// Chromium path do Railway
+const chromiumPath = process.env.CHROMIUM_PATH || null;
+
 let client;
 
 
 // -------------------------------------------
-// FUNÇÃO KEEP ALIVE PARA O RENDER E PUPPETEER
+// KEEP ALIVE PARA RAILWAY
 // -------------------------------------------
 function ativarKeepAlive() {
-    // Mantém o navegador vivo
     setInterval(() => {
-        try {
-            client.pupPage?.evaluate(() => {});
-        } catch (e) {
-            console.log("⚠ KeepAlive falhou:", e.message);
-        }
-    }, 25000);
-
-    // Evita que o Render derrube o container
-    setInterval(() => {
-        console.log("🔄 Heartbeat: servidor ativo");
-    }, 50000);
+        console.log("🔄 Heartbeat ativo — Railway ok");
+    }, 30000);
 }
 
 
@@ -55,59 +48,64 @@ async function reconectar(forceQR = false) {
 }
 
 
-
 // -------------------------------------------
-// FUNÇÃO PARA CRIAR NOVA INSTÂNCIA DO CLIENT
+// INICIAR INSTÂNCIA DO CLIENT
 // -------------------------------------------
 function iniciarWhatsapp() {
 
     client = new Client({
-        authStrategy: new LocalAuth(),
+        authStrategy: new LocalAuth({
+            dataPath: './.wpp-session'
+        }),
+
         puppeteer: {
+            executablePath: chromiumPath,
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu',
+                '--single-process'
+            ]
         },
+
         restartOnAuthFail: true
     });
 
-    // Ativa keep alive
     ativarKeepAlive();
 
-    // QR Code
     client.on("qr", qr => {
         console.log("\n🔵 QR Code gerado!");
         io.emit("whatsapp_qr", qr);
         qrcode.generate(qr, { small: true });
     });
 
-    // Ready
     client.on("ready", () => {
         console.log("\n🟢 WhatsApp conectado!");
         io.emit("whatsapp_ready");
     });
 
-    // Evento de desconexão
     client.on("disconnected", reason => {
         console.log("🔴 WhatsApp desconectado:", reason);
         reconectar(true);
     });
 
-    // Sessão inválida (quando o WhatsApp derruba)
     client.on("remote_session_invalidated", () => {
-        console.log("❌ Sessão inválida, gerando novo QR...");
+        console.log("❌ Sessão inválida, pedindo novo QR...");
         reconectar(true);
     });
 
-    // Mensagens automáticas
     configurarFunil(client);
 
     client.initialize();
 }
 
 
-
 // -------------------------------------------
-// FUNIL / MENSAGENS AUTOMATIZADAS
+// FUNIL DE RESPOSTAS
 // -------------------------------------------
 function configurarFunil(client) {
 
@@ -115,123 +113,76 @@ function configurarFunil(client) {
 
     client.on('message', async msg => {
 
-        // 1 — Saudação / Menu
         if (msg.body.match(/(menu|Menu|dia|tarde|noite|oi|Oi|Olá|olá|ola|Ola)/i) && msg.from.endsWith('@c.us')) {
 
             const chat = await msg.getChat();
             const contact = await msg.getContact();
-            const name = contact.pushname.split(" ")[0];
+            const name = contact.pushname?.split(" ")[0] || "";
 
-            await delay(3000);
+            await delay(2000);
             await chat.sendStateTyping();
-            await delay(3000);
+            await delay(2000);
 
             await client.sendMessage(msg.from,
-                `Olá! ${name}. Sou o assistente virtual da Marthec.\n\nEscolha uma opção:\n\n1 - Como funciona?\n2 - Valores dos planos\n3 - Quero um orçamento\n4 - Como aderir?\n5 - Falar com atendente`
+                `Olá ${name}! Sou o assistente virtual da Marthec.\n\nEscolha uma opção:\n\n1 - Como funciona?\n2 - Valores\n3 - Orçamento\n4 - Como aderir?\n5 - Atendente`
             );
         }
 
-        // Resposta 1
         if (msg.body === '1') {
-
             const chat = await msg.getChat();
-
-            await delay(3000);
             await chat.sendStateTyping();
-            await delay(3000);
-
+            await delay(2000);
             await client.sendMessage(msg.from,
-                'Nós desenvolvemos e hospedamos o site para sua empresa, e você só começa a pagar depois que aprovar o site e já estiver online.'
-            );
-
-            await delay(3000);
-            await chat.sendStateTyping();
-            await delay(3000);
-
-            await client.sendMessage(msg.from,
-                'COMO FUNCIONA?\n1º Passo: Você irá responder um formulário para ...\n2º Passo: Iremos desenvolver o site da sua empresa'
-            );
-
-            await delay(3000);
-            await client.sendMessage(msg.from,
-                'Link para o formulário: https://www.marthec.com.br'
+                'Nós desenvolvemos seu site e você só paga após aprovar ele.'
             );
         }
 
-        // Resposta 2
         if (msg.body === '2') {
-
             const chat = await msg.getChat();
-
-            await delay(3000);
             await chat.sendStateTyping();
-            await delay(3000);
-
+            await delay(2000);
             await client.sendMessage(msg.from,
-                '*Plano Individual:* R$22,50 \n *Plano Dev:* R$39,50 \n *Plano Completo:* R$49,50 \n...'
+                '*Planos:* R$22,50 / R$39,50 / R$49,50'
             );
-
-            await delay(3000);
-            await client.sendMessage(msg.from, 
-                'Link para adesão: https://www.marthec.com.br');
         }
 
-        // Resposta 3
         if (msg.body === '3') {
-            const chat = await msg.getChat();
-            await delay(3000);
-            await chat.sendStateTyping();
-            await delay(3000);
-            await client.sendMessage(msg.from, 'Sorteio de prêmios...');
-            await delay(3000);
-            await client.sendMessage(msg.from, 'https://www.marthec.com.br');
+            await client.sendMessage(msg.from, 'Nosso orçamento: https://www.marthec.com.br');
         }
 
-        // Resposta 4
         if (msg.body === '4') {
-            const chat = await msg.getChat();
-            await delay(3000);
-            await chat.sendStateTyping();
-            await delay(3000);
-            await client.sendMessage(msg.from, 'Você pode aderir...');
-            await delay(3000);
-            await client.sendMessage(msg.from, 'https://www.marthec.com.br');
+            await client.sendMessage(msg.from, 'Para aderir acesse https://www.marthec.com.br');
         }
 
-        // Resposta 5
         if (msg.body === '5') {
-            const chat = await msg.getChat();
-            await delay(3000);
-            await chat.sendStateTyping();
-            await delay(3000);
-            await client.sendMessage(msg.from, 'Fale com atendente...');
+            await client.sendMessage(msg.from, 'Encaminhando para atendente...');
         }
+
     });
 }
 
 
-
 // -------------------------------------------
-// INICIA O CLIENTE UMA VEZ AO SUBIR O SERVIDOR
+// INICIA WHATSAPP NA SUBIDA
 // -------------------------------------------
 iniciarWhatsapp();
 
 
 // -------------------------------------------
-// SOCKET.IO – BOTÃO "GERAR NOVO QR"
+// SOCKET.IO PAINEL
 // -------------------------------------------
 io.on("connection", (socket) => {
-    console.log("🖥️ Painel administrativo conectado!");
+    console.log("🖥️ Painel conectado!");
 
     socket.on("gerar_qr", async () => {
-        console.log("🔄 Painel pediu novo QR Code...");
+        console.log("🔄 Painel pediu novo QR");
         await resetarWhatsapp();
     });
 });
 
 
 // -------------------------------------------
-// SERVIDOR HTTP DO RENDER
+// SERVIDOR HTTP
 // -------------------------------------------
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
@@ -240,29 +191,15 @@ server.listen(PORT, () => {
 
 
 // -------------------------------------------
-// RESETAR WHATSAPP — LIMPA CHROME E REINICIA
+// RESETAR WHATSAPP
 // -------------------------------------------
 async function resetarWhatsapp() {
+
     console.log("♻ Reiniciando WhatsApp...");
 
     try {
-        if (client) {
-            await client.destroy();
-        }
-    } catch (e) {
-        console.log("⚠ Erro ao destruir client (não é grave):", e.message);
-    }
+        if (client) await client.destroy();
+    } catch {}
 
-    // Mata todos os processos do Chrome deixados abertos
-    const { exec } = require("child_process");
-
-    exec("pkill chrome || pkill chromium || pkill google-chrome", () => {
-        console.log("🧹 Matando processos antigos do Chrome...");
-    });
-
-    // Aguarda 1 segundo para limpeza
-    await new Promise(res => setTimeout(res, 1000));
-
-    // Reinicializa o cliente
     iniciarWhatsapp();
 }

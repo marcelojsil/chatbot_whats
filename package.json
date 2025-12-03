@@ -1,20 +1,20 @@
-{  
-  "name": "chatbot-whats-backend",
+
+{
+  "name": "marthec-whatsapp-bot",
   "version": "1.0.0",
-  "description": "Chatbot WhatsApp hospedado no Render com Socket.IO e Funil Automático",
   "main": "chatbot.js",
   "scripts": {
-    "start": "node chatbot.js"
-  },
-  "dependencies": {
-    "express": "^4.18.3",
-    "socket.io": "^4.7.5",
-    "whatsapp-web.js": "^1.23.0",
-    "puppeteer-core": "^21.10.0",
-    "qrcode-terminal": "^0.12.0"
+    "start": "node chatbot.js",
+    "postinstall": "apt-get update && apt-get install -y chromium"
   },
   "engines": {
     "node": "18.x"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.5",
+    "whatsapp-web.js": "^1.22.1",
+    "qrcode-terminal": "^0.12.0",
+    "puppeteer": "^21.3.8"
   }
- 
 }
